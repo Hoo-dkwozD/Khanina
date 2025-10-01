@@ -1,0 +1,9 @@
+{
+    "method": "POST",
+    "base_url": "https://api.example.com",
+    "endpoint": "/v1/chat/completions",
+    "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer YOUR_API_KEY"
+    }
+}

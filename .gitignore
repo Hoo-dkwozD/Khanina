@@ -1,0 +1,25 @@
+# Results directory
+results/
+
+# User configuration files
+resources/headers.json
+resources/body.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
