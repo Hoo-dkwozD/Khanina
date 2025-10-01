@@ -39,7 +39,8 @@ A CLI tool for fuzzing LLM endpoints for prompt injection and jailbreaking vulne
    ```json
    {
        "method": "POST",
-       "url": "https://api.example.com/v1/chat/completions",
+       "base_url": "https://api.example.com",
+       "endpoint": "/v1/chat/completions",
        "headers": {
            "Content-Type": "application/json",
            "Authorization": "Bearer YOUR_API_KEY"
@@ -55,7 +56,7 @@ A CLI tool for fuzzing LLM endpoints for prompt injection and jailbreaking vulne
 
 Run the application:
 ```bash
-python khanina.py [--verbose]
+python khanina.py [--help | -h] [--verbose | -v]
 ```
 
 Follow the interactive prompts to:
@@ -70,7 +71,8 @@ Results will be saved in `results/<project>/` as Excel files.
 
 ### Headers Configuration
 - `method`: HTTP method (GET/POST/PUT/etc.)
-- `url`: Target endpoint URL
+- `base_url`: Target's base URL
+- `endpoint`: Target's endpoint
 - `headers`: HTTP headers as key-value pairs
 
 ### Body Configuration

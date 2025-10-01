@@ -14,6 +14,7 @@ from colorama import Fore, Style
 from jsonpointer import JsonPointer, JsonPointerException
 from openpyxl import load_workbook, Workbook
 import requests
+from tqdm import tqdm
 
 # Initialize colorama
 colorama.init()
@@ -44,8 +45,11 @@ def ascii_art():
 
 # Main function
 def main():
-    parser = argparse.ArgumentParser(description="Khaniña - LLM Prompt Injection Fuzzer")
-    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+    parser = argparse.ArgumentParser(
+        description="Khaniña - LLM Prompt Injection Fuzzer",
+        epilog="This tool sends prompts from Excel files to an LLM API endpoint and collects responses for analysis. Use verbose mode for detailed output during prompt processing."
+    )
+    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output, showing detailed progress for each prompt including index out of total and response times')
     args = parser.parse_args()
 
     ascii_art()
@@ -108,7 +112,8 @@ def main():
     # Display details
     print_info("Endpoint Details:")
     print(f"  Method: {headers_config.get('method')}")
-    print(f"  URL: {headers_config.get('base_url')}")
+    print(f"  Base URL: {headers_config.get('base_url')}")
+    print(f"  Endpoint: {headers_config.get('endpoint')}")
     print(f"  Headers: {json.dumps(headers_config.get('headers', {}), indent=2)}")
     print_info("Request Body:")
     print(f"  {json.dumps(body_config, indent=2)}")
@@ -215,12 +220,15 @@ def main():
             print_error(f"Failed to create results worksheet for {pf.name}, skipping.")
             continue
 
+        if not args.verbose:
+            pbar = tqdm(total=len(prompts), desc="Processing prompts")
+
         for idx, prompt in enumerate(prompts, 1):
             if not isinstance(prompt, str):
                 prompt = str(prompt)
 
             if args.verbose:
-                print_info(f"Sending prompt {idx}: {prompt[:50]}...")
+                print_info(f"Sending prompt {idx}/{len(prompts)}: {prompt[:50]}...")
 
             # Prepare request
             method = headers_config.get('method').upper()
@@ -260,12 +268,16 @@ def main():
 
                 if args.verbose:
                     print_success(f"Response received in {response_time:.2f}s")
-                else:
-                    print(f"Processed {idx}/{len(prompts)}", end='\r')
 
             except Exception as e:
                 print_error(f"Error sending request for prompt {idx}: {e}")
                 result_ws.append([idx, prompt, "Error", str(e), 0])
+
+            if not args.verbose:
+                pbar.update(1)
+
+        if not args.verbose:
+            pbar.close()
 
         result_wb.save(result_path)
         print_success(f"Results saved to {result_path}")
