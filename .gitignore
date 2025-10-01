@@ -1,5 +1,5 @@
-# Results directory
-results/
+# Results directory's subdirectories only
+results/**/
 
 # User configuration files
 resources/headers.json
