@@ -224,8 +224,18 @@ def main():
             pbar = tqdm(total=len(prompts), desc="Processing prompts")
 
         for idx, prompt in enumerate(prompts, 1):
+            # Ensure prompt is string
             if not isinstance(prompt, str):
                 prompt = str(prompt)
+
+            # Strip whitespace and quotation marks
+            prompt = prompt.strip().strip('"').strip("'")
+
+            # Skip empty prompts
+            if prompt == "":
+                if args.verbose:
+                    print_warning(f"Skipping empty prompt at index {idx}.")
+                continue
 
             if args.verbose:
                 print_info(f"Sending prompt {idx}/{len(prompts)}: {prompt[:50]}...")

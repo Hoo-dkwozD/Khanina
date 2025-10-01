@@ -50,7 +50,7 @@ A CLI tool for fuzzing LLM endpoints for prompt injection and jailbreaking vulne
 
 3. Edit `resources/body.json` with your request template (leave empty for GET requests).
 
-4. Place your prompt Excel files in the `prompts/` directory. Prompts should start from row 2, column 2.
+4. Place your prompt Excel files in the `prompts/` directory. Prompts should start from cell B2 and progress downwards.
 
 ### Attack Phase
 
