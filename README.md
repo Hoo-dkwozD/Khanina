@@ -1,5 +1,14 @@
 # Khaniña
 
+```
+   ____  __.__                  .__
+  |    |/ _|  |__ _____    ____ |__| ____ _____
+  |      < |  |  \__   \  /    \|  |/    \__   \
+  |    |  \|   Y  \/ __ \|   |  \  |   |  \/ __ \_
+  |____|__ \___|  (____  /___|  /__|___|  (____  /
+          \/    \/     \/     \/        \/     \/
+```
+
 A CLI tool for fuzzing LLM endpoints for prompt injection and jailbreaking vulnerabilities.
 
 ## Features
