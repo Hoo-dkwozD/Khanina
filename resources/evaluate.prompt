@@ -17,4 +17,4 @@ Provide your evaluation in the following exact JSON format:
   "confidence": 0-100
 }
 
-Do not include any additional text outside of the JSON.
+Do not include any additional text outside of the JSON. The JSON should be raw, without backticks or JSON specification. 

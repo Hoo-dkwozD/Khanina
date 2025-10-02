@@ -5,6 +5,7 @@ import argparse
 from datetime import datetime
 import json
 from pathlib import Path
+import pprint
 import re
 import time
 
@@ -124,6 +125,47 @@ def main():
     if confirm != 'y':
         print_info("Operation cancelled.")
         return
+
+    # Send test request
+    print_info("Sending test request to validate configuration...")
+    test_url = headers_config.get('base_url') + headers_config.get('endpoint')
+    test_headers = headers_config.get('headers')
+    test_body = body_config.copy()
+    # Insert a test prompt
+    test_body_str = json.dumps(test_body)
+    test_body_str = test_body_str.replace("{{PROMPT}}", "test")
+    try:
+        test_body = json.loads(test_body_str)
+    except json.JSONDecodeError:
+        print_error("Error inserting test prompt into request body.")
+        return
+    try:
+        method = headers_config.get('method').upper()
+        if method == 'GET':
+            test_response = requests.get(test_url, headers=test_headers, params=test_body)
+        else:
+            test_response = requests.request(method, test_url, headers=test_headers, data=json.dumps(test_body, separators=(',', ':')))
+        if test_response.status_code == 200:
+            print_success("Test request successful. Endpoint is reachable.")
+        else:
+            print_warning(f"Test request returned status code {test_response.status_code}. Check your configuration.")
+            # Print out request and response details for debugging
+            print_info(f"Request URL: {test_response.request.url}")
+            print_info(f"Request Headers: {test_response.request.headers}")
+            print_info(f"Request Body: {test_response.request.body}")
+            print_info(f"Response Body: {test_response.text}")
+
+            proceed = input("Do you want to proceed anyway? (y/n): ").strip().lower()
+            if proceed != 'y':
+                print_info("Operation cancelled.")
+                return
+    except Exception as e:
+        print_error(f"Error sending test request: {e}")
+        return
+    
+    if args.verbose:
+        print_info("Test request completed.")
+    print_info("Entering main operation phase.")
 
     # LLM Evaluation Option
     enable_llm_eval = input("Do you want to enable LLM evaluation for jailbreak detection? (y/n): ").strip().lower() == 'y'
@@ -255,6 +297,9 @@ def main():
             print_error("Invalid selection.")
             return
 
+    if enable_llm_eval:
+        success_col = []
+
     # Process each selected file
     for pf in selected_files:
         print_info(f"Processing {pf.name}")
@@ -324,7 +369,7 @@ def main():
                 if method == 'GET':
                     response = requests.get(url, headers=headers, params=body)
                 else:
-                    response = requests.request(method, url, headers=headers, json=body)
+                    response = requests.request(method, url, headers=headers, data=json.dumps(body, separators=(',', ':')))
                 response_time = time.time() - start_time
 
                 if response.status_code == 200:
@@ -332,6 +377,9 @@ def main():
                         resp_json = response.json()
                         main_value = JsonPointer(pointer).get(resp_json)
                         full_resp = json.dumps(resp_json)
+
+                        if args.verbose:
+                            print_info(f"Extracted main value: {main_value}")
                     except (JsonPointerException, json.JSONDecodeError):
                         main_value = "Error extracting"
                         full_resp = response.text
@@ -344,29 +392,41 @@ def main():
                     try:
                         print_info(f"Evaluating response with {provider} LLM...")
                         eval_prompt_rendered = eval_template.render(original_prompt=prompt, response=main_value, llm_purpose=llm_purpose)
+                        response_eval = None
                         response_eval = litellm.completion(
                             model=llm_config['model'],
                             messages=[{"role": "user", "content": eval_prompt_rendered}],
                             api_key=llm_config.get('api_key'),
                         )
                         eval_content = response_eval.choices[0].message.content.strip() # type: ignore
+                        eval_content = eval_content.strip('`') # Remove backticks if any
                         eval_data = json.loads(eval_content)
                         success = eval_data.get('success', False)
                         confidence = eval_data.get('confidence', 0)
+                        evaluator_response = eval_content
                     except Exception as e:
                         print_warning(f"Evaluation failed for prompt {idx}: {e}")
                         success = "Error"
                         confidence = "Error"
-                        evaluator_response = str(e) + " | " + str(response_eval)
+                        evaluator_response = str(e)
+                        if response_eval is not None:
+                            evaluator_response += " | LLM response: " + str(response_eval)
+                        if args.verbose:
+                            print_warning(f"Evaluation response: {evaluator_response}")
                 else:
                     success = None
                     confidence = None
                     evaluator_response = None
 
                 if enable_llm_eval:
-                    result_ws.append([idx, prompt, main_value, full_resp, response_time, success, confidence, evaluator_response])
+                    result_ws.append([idx, prompt, str(main_value), full_resp, response_time, success, confidence, evaluator_response])
+
+                    if success:
+                        success_col.append(
+                            {'Index': idx, 'Prompt': prompt, 'Main': main_value, 'Response Time (s)': response_time, 'Success': success, 'Confidence': confidence, 'Evaluator Response': evaluator_response}
+                        )
                 else:
-                    result_ws.append([idx, prompt, main_value, full_resp, response_time])
+                    result_ws.append([idx, prompt, str(main_value), full_resp, response_time])
 
                 if args.verbose:
                     print_success(f"Response received in {response_time:.2f}s")
@@ -386,6 +446,12 @@ def main():
 
         result_wb.save(result_path)
         print_success(f"Results saved to {result_path}")
+
+    if enable_llm_eval and len(success_col) > 0:
+        # Display summary of successful jailbreaks
+        print_info("Summary of successful jailbreaks:")
+        for entry in success_col:
+            print(f"  Index: {entry['Index']}, Prompt: {entry['Prompt'][:50]}..., Main: {entry['Main']}, Confidence: {entry['Confidence']}")
 
     print_success("All processing complete. Goodbye!")
 
