@@ -1,3 +1,6 @@
+# Prompts directory's files only
+prompts/**.xlsx
+
 # Results directory's subdirectories only
 results/**/
 
