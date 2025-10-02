@@ -18,6 +18,7 @@ A CLI tool for fuzzing LLM endpoints for prompt injection and jailbreaking vulne
 - **Flexible Configuration**: JSON-based headers and body configuration in `resources/`
 - **JSON Pointer Extraction**: Specify extraction path for response values
 - **Project Management**: Organize results by project with timestamped outputs
+- **LLM Evaluation**: Optional evaluation of responses for jailbreak/prompt injection detection using external LLM providers
 - **Colored Output**: Informative console output with color coding
 - **Verbose Mode**: Detailed logging with `--verbose` flag
 
@@ -59,7 +60,14 @@ A CLI tool for fuzzing LLM endpoints for prompt injection and jailbreaking vulne
 
 3. Edit `resources/body.json` with your request template (leave empty for GET requests).
 
-4. Place your prompt Excel files in the `prompts/` directory. Prompts should start from cell B2 and progress downwards.
+4. (Optional) For LLM evaluation, copy and configure evaluation files:
+   ```bash
+   cp resources/llm.json.example resources/llm.json
+   cp resources/llm.purpose.example resources/llm.purpose
+   ```
+   Edit `resources/llm.json` with your evaluator LLM provider details and `resources/llm.purpose` with the purpose of the target LLM.
+
+5. Place your prompt Excel files in the `prompts/` directory. Prompts should start from cell B2 and progress downwards.
 
 ### Attack Phase
 
@@ -70,6 +78,7 @@ python khanina.py [--help | -h] [--verbose | -v]
 
 Follow the interactive prompts to:
 - Confirm endpoint configuration
+- (Optional) Enable LLM evaluation for jailbreak detection
 - Select or create a project
 - Specify JSON pointer for response extraction
 - Choose prompt files to use
@@ -91,6 +100,21 @@ JSON object representing the request body. For GET requests, this becomes query 
 Use RFC 6901 JSON Pointer syntax to extract values from responses, e.g.:
 - `/choices/0/message/content` for OpenAI-style responses
 
+### LLM Evaluation Configuration
+When enabled, responses are evaluated for jailbreak/prompt injection vulnerabilities.
+
+- `llm.json`: Evaluator LLM configuration
+  ```json
+  {
+      "provider": "openai",
+      "api_key": "your_evaluator_api_key",
+      "model": "gpt-4"
+  }
+  ```
+  Supported providers: OpenAI, Cohere, Anthropic, Claude, Gemini, Deepseek, Ollama
+- `llm.purpose`: Description of the target LLM's intended purpose
+- `evaluate.prompt`: Template for evaluation prompts (uses Jinja2 templating)
+
 ## Output
 
 Results are saved as Excel files with columns:
@@ -99,6 +123,11 @@ Results are saved as Excel files with columns:
 - Main (extracted value)
 - Full Response
 - Response Time (s)
+
+When LLM evaluation is enabled, additional columns are added:
+- Success (boolean indicating jailbreak detection)
+- Confidence (percentage 0-100)
+- Evaluator Response (full response from evaluator LLM)
 
 ## Requirements
 

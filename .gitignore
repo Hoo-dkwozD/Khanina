@@ -4,6 +4,8 @@ results/**/
 # User configuration files
 resources/headers.json
 resources/body.json
+resources/llm.json
+resources/llm.purpose
 
 # Python cache
 __pycache__/

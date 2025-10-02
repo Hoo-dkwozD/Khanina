@@ -11,7 +11,9 @@ import time
 # Third-party libraries
 import colorama
 from colorama import Fore, Style
+from jinja2.sandbox import SandboxedEnvironment
 from jsonpointer import JsonPointer, JsonPointerException
+import litellm
 from openpyxl import load_workbook, Workbook
 import requests
 from tqdm import tqdm
@@ -123,6 +125,66 @@ def main():
         print_info("Operation cancelled.")
         return
 
+    # LLM Evaluation Option
+    enable_llm_eval = input("Do you want to enable LLM evaluation for jailbreak detection? (y/n): ").strip().lower() == 'y'
+    llm_config = None
+    eval_template = None
+    llm_purpose = None
+    if enable_llm_eval:
+        # Check for llm.json
+        llm_config_file = Path('resources/llm.json')
+        if not llm_config_file.exists():
+            print_warning("llm.json not found. Please copy resources/llm.json.example to resources/llm.json and configure.")
+            return
+
+        # Load llm config
+        try:
+            with open(llm_config_file) as f:
+                llm_config = json.load(f)
+        except json.JSONDecodeError as e:
+            print_error(f"Invalid JSON in llm.json: {e}")
+            return
+
+        # Validate provider
+        supported_providers = ['openai', 'cohere', 'anthropic', 'claude', 'gemini', 'deepseek', 'ollama']
+        provider = llm_config.get('provider', '').lower()
+        if provider not in supported_providers:
+            print_error(f"Unsupported provider: {provider}. Supported: {', '.join(supported_providers)}")
+            return
+
+        # Check required keys
+        if 'model' not in llm_config:
+            print_error("llm.json must contain 'model'.")
+            return
+        if provider != 'ollama' and 'api_key' not in llm_config:
+            print_error("llm.json must contain 'api_key' for this provider.")
+            return
+
+        # Load evaluate.prompt
+        eval_prompt_file = Path('resources/evaluate.prompt')
+        if not eval_prompt_file.exists():
+            print_error("evaluate.prompt not found in resources/.")
+            return
+        with open(eval_prompt_file) as f:
+            eval_template_str = f.read()
+
+        # Load llm.purpose
+        llm_purpose_file = Path('resources/llm.purpose')
+        if not llm_purpose_file.exists():
+            print_error("llm.purpose not found in resources/. Please copy resources/llm.purpose.example to resources/llm.purpose and configure.")
+            return
+        with open(llm_purpose_file) as f:
+            llm_purpose = f.read().strip()
+        if llm_purpose == "":
+            print_warning("llm.purpose is empty. Add a purpose for proper evaluation context.")
+            return
+
+        # Create Jinja2 environment
+        jinja_env = SandboxedEnvironment()
+        eval_template = jinja_env.from_string(eval_template_str)
+
+        print_info("LLM evaluation enabled.")
+
     # Project management
     results_dir = Path('results')
     results_dir.mkdir(exist_ok=True)
@@ -215,7 +277,10 @@ def main():
         result_wb = Workbook()
         result_ws = result_wb.active
         if result_ws is not None:
-            result_ws.append(['Index', 'Prompt', 'Main', 'Full Response', 'Response Time (s)'])
+            if enable_llm_eval:
+                result_ws.append(['Index', 'Prompt', 'Main', 'Full Response', 'Response Time (s)', 'Success', 'Confidence', 'Evaluator Response'])
+            else:
+                result_ws.append(['Index', 'Prompt', 'Main', 'Full Response', 'Response Time (s)'])
         else:
             print_error(f"Failed to create results worksheet for {pf.name}, skipping.")
             continue
@@ -274,14 +339,44 @@ def main():
                     main_value = f"HTTP {response.status_code}"
                     full_resp = response.text
 
-                result_ws.append([idx, prompt, main_value, full_resp, response_time])
+                # LLM Evaluation
+                if enable_llm_eval and eval_template is not None and llm_config is not None:
+                    try:
+                        print_info(f"Evaluating response with {provider} LLM...")
+                        eval_prompt_rendered = eval_template.render(original_prompt=prompt, response=main_value, llm_purpose=llm_purpose)
+                        response_eval = litellm.completion(
+                            model=llm_config['model'],
+                            messages=[{"role": "user", "content": eval_prompt_rendered}],
+                            api_key=llm_config.get('api_key'),
+                        )
+                        eval_content = response_eval.choices[0].message.content.strip() # type: ignore
+                        eval_data = json.loads(eval_content)
+                        success = eval_data.get('success', False)
+                        confidence = eval_data.get('confidence', 0)
+                    except Exception as e:
+                        print_warning(f"Evaluation failed for prompt {idx}: {e}")
+                        success = "Error"
+                        confidence = "Error"
+                        evaluator_response = str(e) + " | " + str(response_eval)
+                else:
+                    success = None
+                    confidence = None
+                    evaluator_response = None
+
+                if enable_llm_eval:
+                    result_ws.append([idx, prompt, main_value, full_resp, response_time, success, confidence, evaluator_response])
+                else:
+                    result_ws.append([idx, prompt, main_value, full_resp, response_time])
 
                 if args.verbose:
                     print_success(f"Response received in {response_time:.2f}s")
 
             except Exception as e:
                 print_error(f"Error sending request for prompt {idx}: {e}")
-                result_ws.append([idx, prompt, "Error", str(e), 0])
+                if enable_llm_eval:
+                    result_ws.append([idx, prompt, "Error", str(e), 0, "N/A", "N/A", "N/A"])
+                else:
+                    result_ws.append([idx, prompt, "Error", str(e), 0])
 
             if not args.verbose:
                 pbar.update(1)
